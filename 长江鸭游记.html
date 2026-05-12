@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>长江鸭游记 - 中国鸭子美食地图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0a1628;
+            color: #fff;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* 河流背景Canvas */
+        #riverCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.6;
+        }
+
+        /* 主容器 */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 标题区 */
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(10, 22, 40, 0.8);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 200, 255, 0.2);
+        }
+
+        .header h1 {
+            font-size: 3em;
+            background: linear-gradient(135deg, #ffd700, #ff8c00, #ff6347);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        .header p {
+            color: #8ecae6;
+            font-size: 1.2em;
+            margin-top: 10px;
+        }
+
+        .duck-icon {
+            font-size: 2em;
+            animation: float 2s ease-in-out infinite;
+            display: inline-block;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* 河流路径容器 */
+        .river-path {
+            position: relative;
+            padding: 50px 0;
+        }
+
+        /* SVG河流线 */
+        .river-svg {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .river-line {
+            fill: none;
+            stroke: url(#riverGradient);
+            stroke-width: 4;
+            stroke-dasharray: 10, 5;
+            animation: flow 3s linear infinite;
+            opacity: 0.8;
+        }
+
+        @keyframes flow {
+            to { stroke-dashoffset: -30; }
+        }
+
+        /* 城市站点 */
+        .station {
+            position: relative;
+            display: flex;
+            align-items: center;
+            margin: 80px 0;
+            z-index: 2;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease;
+        }
+
+        .station.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .station:nth-child(even) {
+            flex-direction: row-reverse;
+        }
+
+        .station:nth-child(even) .station-content {
+            text-align: right;
+            margin-right: 50px;
+            margin-left: 0;
+        }
+
+        .station:nth-child(even) .station-dot {
+            margin-right: 0;
+            margin-left: 20px;
+        }
+
+        /* 站点标记 */
+        .station-dot {
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, #ffd700, #ff8c00);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 0 40px rgba(255, 140, 0, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 3;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .station-dot:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+        }
+
+        .station-dot::after {
+            content: '';
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 50%;
+            animation: pulse 2s ease-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        /* 内容卡片 */
+        .station-content {
+            flex: 1;
+            margin-left: 50px;
+            background: rgba(20, 40, 80, 0.9);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(100, 200, 255, 0.2);
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            max-width: 400px;
+        }
+
+        .station-content:hover {
+            transform: translateX(10px);
+            border-color: #ffd700;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .station:nth-child(even) .station-content:hover {
+            transform: translateX(-10px);
+        }
+
+        .city-name {
+            font-size: 1.8em;
+            color: #ffd700;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .dish-name {
+            font-size: 1.3em;
+            color: #ff8c00;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .dish-desc {
+            color: #b0c4de;
+            line-height: 1.6;
+            font-size: 0.95em;
+        }
+
+        .tags {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: rgba(255, 140, 0, 0.2);
+            color: #ff8c00;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            border: 1px solid rgba(255, 140, 0, 0.3);
+        }
+
+        /* 详情弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: linear-gradient(135deg, #1a3a5c, #0d2137);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            position: relative;
+            animation: modalIn 0.4s ease;
+        }
+
+        @keyframes modalIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 2em;
+            cursor: pointer;
+            color: #8ecae6;
+            transition: color 0.3s;
+        }
+
+        .modal-close:hover {
+            color: #ffd700;
+        }
+
+        .modal h2 {
+            color: #ffd700;
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .modal .subtitle {
+            text-align: center;
+            color: #ff8c00;
+            font-size: 1.2em;
+            margin-bottom: 25px;
+        }
+
+        .modal-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .modal-section h3 {
+            color: #8ecae6;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .modal-section p, .modal-section li {
+            color: #b0c4de;
+            line-height: 1.8;
+        }
+
+        .modal-section ul {
+            padding-left: 20px;
+        }
+
+        .flavor-radar {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+
+        .flavor-item {
+            text-align: center;
+        }
+
+        .flavor-bar {
+            width: 40px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            position: relative;
+            margin: 5px auto;
+            overflow: hidden;
+        }
+
+        .flavor-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, #ff6347, #ffd700);
+            border-radius: 0 0 5px 5px;
+            transition: height 1s ease;
+        }
+
+        .flavor-label {
+            font-size: 0.8em;
+            color: #8ecae6;
+        }
+
+        /* 漂流鸭 */
+        .floating-duck {
+            position: fixed;
+            font-size: 3em;
+            z-index: 50;
+            pointer-events: none;
+            transition: all 2s ease-in-out;
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.3));
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 40, 80, 0.9);
+            padding: 15px 30px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .progress-text {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .progress-track {
+            width: 200px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ffd700, #ff8c00);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 4px;
+        }
+
+        /* 开始按钮 */
+        .start-btn {
+            display: block;
+            margin: 30px auto;
+            padding: 15px 50px;
+            font-size: 1.3em;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            color: #0a1628;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.4);
+        }
+
+        .start-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(255, 215, 0, 0.6);
+        }
+
+        .start-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2em; }
+            .station { flex-direction: column !important; text-align: center; }
+            .station:nth-child(even) { flex-direction: column !important; }
+            .station-content { margin: 20px 0 0 0 !important; text-align: center !important; max-width: 90%; }
+            .station:nth-child(even) .station-content { margin: 20px 0 0 0 !important; text-align: center !important; }
+            .station-dot { margin: 0 !important; }
+            .river-svg { width: 100%; }
+            .modal { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="riverCanvas"></canvas>
+
+    <div class="floating-duck" id="floatingDuck">🦆</div>
+
+    <div class="container">
+        <div class="header">
+            <div class="duck-icon">🦆</div>
+            <h1>长江鸭游记</h1>
+            <p>从雪域高原到东海之滨，一只鸭子的美食漂流记</p>
+            <p style="font-size: 0.9em; color: #5a7a9a; margin-top: 15px;">
+                点击"开始漂流"让鸭子顺江而下，或点击任意城市探索当地鸭肴
+            </p>
+            <button class="start-btn" id="startBtn" onclick="startJourney()">🌊 开始漂流</button>
+        </div>
+
+        <div class="river-path" id="riverPath">
+            <!-- SVG河流线 -->
+            <svg class="river-svg" viewBox="0 0 800 2000" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="riverGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#4a90e2;stop-opacity:0.8" />
+                        <stop offset="50%" style="stop-color:#5ba3f5;stop-opacity:0.6" />
+                        <stop offset="100%" style="stop-color:#4a90e2;stop-opacity:0.8" />
+                    </linearGradient>
+                </defs>
+                <path class="river-line" d="M 400 50 Q 350 150 400 250 T 400 450 T 350 650 T 400 850 T 350 1050 T 400 1250 T 350 1450 T 400 1650 T 350 1850" />
+            </svg>
+
+            <!-- 成都 -->
+            <div class="station" data-index="0" data-city="成都" data-km="0">
+                <div class="station-dot" onclick="openModal(0)">🌶️</div>
+                <div class="station-content" onclick="openModal(0)">
+                    <div class="city-name">🏔️ 成都</div>
+                    <div class="dish-name">樟茶鸭</div>
+                    <div class="dish-desc">四制工艺：腌、熏、蒸、炸。樟木与茶叶的熏香渗透每一丝鸭肉，外酥里嫩，茶香入骨。</div>
+                    <div class="tags">
+                        <span class="tag">🍃 熏香</span>
+                        <span class="tag">🔥 四道工序</span>
+                        <span class="tag">🦆 秋季公鸭</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 乐山 -->
+            <div class="station" data-index="1" data-city="乐山" data-km="150">
+                <div class="station-dot" onclick="openModal(1)">🍬</div>
+                <div class="station-content" onclick="openModal(1)">
+                    <div class="city-name">⛰️ 乐山</div>
+                    <div class="dish-name">甜皮鸭</div>
+                    <div class="dish-desc">改良自卤鸭，挂糖炸制。外皮脆甜如糖衣，内里肉质肥厚细嫩，甜辣交织。</div>
+                    <div class="tags">
+                        <span class="tag">🍯 甜脆</span>
+                        <span class="tag">🌶️ 微辣</span>
+                        <span class="tag">✨ 挂糖工艺</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 重庆 -->
+            <div class="station" data-index="2" data-city="重庆" data-km="300">
+                <div class="station-dot" onclick="openModal(2)">🍲</div>
+                <div class="station-content" onclick="openModal(2)">
+                    <div class="city-name">🌫️ 重庆</div>
+                    <div class="dish-name">酸萝卜老鸭汤</div>
+                    <div class="dish-desc">川渝经典炖菜，酸萝卜爽口开胃，鸭肉耙烂脱骨。一锅好汤，健脾祛湿。</div>
+                    <div class="tags">
+                        <span class="tag">🥣 汤锅</span>
+                        <span class="tag">🧘 养生</span>
+                        <span class="tag">🦴 耙烂</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 武汉 -->
+            <div class="station" data-index="3" data-city="武汉" data-km="800">
+                <div class="station-dot" onclick="openModal(3)">🌶️</div>
+                <div class="station-content" onclick="openModal(3)">
+                    <div class="city-name">🌉 武汉</div>
+                    <div class="dish-name">鸭脖 / 鸭货</div>
+                    <div class="dish-desc">武汉人将鸭脖这"食之无味、弃之可惜"的部位变成全民美食。麻辣鲜香，啃到停不下来。</div>
+                    <div class="tags">
+                        <span class="tag">🌶️ 麻辣</span>
+                        <span class="tag">🦴 耐啃</span>
+                        <span class="tag">🍺 下酒神器</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 南京 -->
+            <div class="station" data-index="4" data-city="南京" data-km="1200">
+                <div class="station-dot" onclick="openModal(4)">👑</div>
+                <div class="station-content" onclick="openModal(4)">
+                    <div class="city-name">🏯 南京</div>
+                    <div class="dish-name">盐水鸭 / 烤鸭</div>
+                    <div class="dish-desc">"没有一只鸭子能活着走出南京"。皮白肉嫩的盐水鸭，外烤内煮的焖炉烤鸭——鸭都双绝。</div>
+                    <div class="tags">
+                        <span class="tag">🦆 鸭都</span>
+                        <span class="tag">⚪ 皮白肉嫩</span>
+                        <span class="tag">🔴 红烤白煮</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 扬州 -->
+            <div class="station" data-index="5" data-city="扬州" data-km="1350">
+                <div class="station-dot" onclick="openModal(5)">🎭</div>
+                <div class="station-content" onclick="openModal(5)">
+                    <div class="city-name">🌸 扬州</div>
+                    <div class="dish-name">三套鸭</div>
+                    <div class="dish-desc">家鸭套野鸭，野鸭套菜鸽。三层套叠，三种鲜味交融，淮扬菜刀工与火候的极致体现。</div>
+                    <div class="tags">
+                        <span class="tag">🎎 套娃菜</span>
+                        <span class="tag">🔪 刀工</span>
+                        <span class="tag">🍲 三鲜合一</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 上海 -->
+            <div class="station" data-index="6" data-city="上海" data-km="1500">
+                <div class="station-dot" onclick="openModal(6)">🌊</div>
+                <div class="station-content" onclick="openModal(6)">
+                    <div class="city-name">🏙️ 上海</div>
+                    <div class="dish-name">八宝鸭</div>
+                    <div class="dish-desc">"腹含乾坤"：糯米、火腿、干贝、虾仁等八宝填入鸭腹，蒸制数小时，丰腴饱满，满堂皆香。</div>
+                    <div class="tags">
+                        <span class="tag">🎁 八宝填馅</span>
+                        <span class="tag">🍚 糯米香</span>
+                        <span class="tag">🎎 本帮名菜</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; padding: 50px; color: #5a7a9a;">
+            <p style="font-size: 1.2em;">🌊 鸭子已抵达东海入海口</p>
+            <p style="margin-top: 10px;">中国食鸭文化，源远流长，博大精深</p>
+        </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div class="progress-bar" id="progressBar" style="display: none;">
+        <span class="progress-text" id="progressText">🦆 漂流中...</span>
+        <div class="progress-track">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <span id="kmText">0 km</span>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">城市名</h2>
+            <div class="subtitle" id="modalDish">菜名</div>
+            
+            <div class="modal-section">
+                <h3>📖 历史渊源</h3>
+                <p id="modalHistory">历史内容...</p>
+            </div>
+
+            <div class="modal-section">
+                <h3>👨‍🍳 制作工艺</h3>
+                <ul id="modalSteps">
+                    <li>步骤1</li>
+                </ul>
+            </div>
+
+            <div class="modal-section">
+                <h3>👅 口味特征</h3>
+                <div class="flavor-radar" id="flavorRadar">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>💡 冷知识</h3>
+                <p id="modalTrivia">冷知识内容...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 数据 ==========
+        const duckData = [
+            {
+                city: '成都',
+                dish: '樟茶鸭',
+                history: '成都最有名的熏烤菜品之一，属于川菜传统名菜。其历史可追溯至清代，因使用樟树叶和茶叶熏制而得名。四道工序（腌、熏、蒸、炸）使其成为"四制樟茶鸭"。',
+                steps: [
+                    '选料：秋季肉厚膘肥的公鸭',
+                    '腌制：用花椒、盐、绍酒等腌制入味',
+                    '熏制：樟树叶与茶叶铺底，熏至金黄',
+                    '蒸制：蒸至鸭肉酥烂',
+                    '炸制：油炸至外皮酥脆'
+                ],
+                flavors: { salty: 60, sweet: 20, spicy: 10, savory: 90, aroma: 95 },
+                trivia: '正宗的樟茶鸭吃起来完全看不到茶叶，但每一口都有浓郁的樟木茶香。这道菜也是川菜中少有的不辣名菜。'
+            },
+            {
+                city: '乐山',
+                dish: '甜皮鸭',
+                history: '改良自传统卤鸭，又称"甜皮卤鸭"。乐山作为上河帮川菜发源地之一，将卤鸭与糖色工艺结合，创造出独特的甜脆口感。',
+                steps: [
+                    '初加工：鸭子处理干净，焯水去腥',
+                    '炒糖色：冰糖炒至琥珀色',
+                    '卤制：老卤水中卤至入味',
+                    '炸制：控制油温浸炸至皮脆',
+                    '挂糖：淋上糖浆，形成脆甜外皮'
+                ],
+                flavors: { salty: 50, sweet: 85, spicy: 30, savory: 70, aroma: 80 },
+                trivia: '甜皮鸭的"甜"来自麦芽糖或冰糖，"皮"讲究脆而不硬。乐山人吃甜皮鸭喜欢配一碗豆腐脑，甜咸搭配。'
+            },
+            {
+                city: '重庆',
+                dish: '酸萝卜老鸭汤',
+                history: '川渝地区经典炖菜，以老鸭和酸萝卜为主料。重庆潮湿多雾，当地人善用酸萝卜祛湿开胃，老鸭滋阴，是秋冬养生佳品。',
+                steps: [
+                    '备料：老鸭斩块，酸萝卜切片',
+                    '焯水：鸭肉冷水下锅去血沫',
+                    '煸炒：姜片、花椒爆香鸭肉',
+                    '炖煮：加开水、酸萝卜，小火炖2小时',
+                    '调味：起锅前加盐、胡椒粉'
+                ],
+                flavors: { salty: 50, sweet: 10, spicy: 20, savory: 60, aroma: 70 },
+                trivia: '正宗的老鸭汤要用三年以上的老鸭，炖出的汤才会金黄浓郁。酸萝卜最好是自家老坛泡制，越陈越香。'
+            },
+            {
+                city: '武汉',
+                dish: '鸭脖 / 鸭货',
+                history: '武汉人将鸭脖这"食之无味、弃之可惜"的部位变成全民美食。周黑鸭、精武鸭脖等品牌从这里走向全国，成为武汉的城市名片。',
+                steps: [
+                    '选材：优质鸭脖，去除淋巴',
+                    '腌制：盐、料酒、姜片腌制去腥',
+                    '焯水：去血沫，定型',
+                    '卤制：数十种香料老卤慢炖',
+                    '收汁：大火收汁，麻辣入味'
+                ],
+                flavors: { salty: 70, sweet: 40, spicy: 95, savory: 85, aroma: 90 },
+                trivia: '武汉人一年能吃掉上亿只鸭脖。最地道的吃法是"嗦"——用牙齿将肉从骨头上撕下来，连骨髓都要吸干净。'
+            },
+            {
+                city: '南京',
+                dish: '盐水鸭 / 烤鸭',
+                history: '南京有"鸭都"之称，食鸭历史超过2500年。盐水鸭有"六朝风味，白门佳品"之誉；烤鸭则是北京烤鸭的"祖宗"，采用焖炉烤制。',
+                steps: [
+                    '炒盐：花椒与盐炒至微黄',
+                    '腌制：热盐搓揉鸭身，腌制数小时',
+                    '熬卤：老卤加香料熬制',
+                    '复卤：鸭子浸泡入卤，反复数次',
+                    '煮制：低温慢煮一个多小时'
+                ],
+                flavors: { salty: 75, sweet: 15, spicy: 0, savory: 80, aroma: 70 },
+                trivia: '南京人一年吃掉约1亿只鸭子。最好的盐水鸭在桂花盛开的秋季制作，称为"桂花鸭"，此时鸭肉最肥美。'
+            },
+            {
+                city: '扬州',
+                dish: '三套鸭',
+                history: '淮扬菜经典，展现刀工与火候的极致。将家鸭、野鸭、菜鸽三套禽类层层相套，三种鲜味交融，是扬州"红楼宴"中的名菜。',
+                steps: [
+                    '整料出骨：三只禽类分别去骨，保持外皮完整',
+                    '套叠：鸽子套入野鸭，野鸭套入家鸭',
+                    '填馅：空隙填入冬菇、笋片、火腿',
+                    '蒸制：扣碗蒸制数小时至酥烂',
+                    '勾芡：原汁勾芡，浇淋成品'
+                ],
+                flavors: { salty: 60, sweet: 30, spicy: 0, savory: 95, aroma: 85 },
+                trivia: '三套鸭的去骨工艺极其复杂，要求"皮不破、骨不碎"。一只熟练的厨师处理三只禽类需要近一个小时。'
+            },
+            {
+                city: '上海',
+                dish: '八宝鸭',
+                history: '上海本帮菜代表，源自上海老饭店。将糯米、火腿、干贝等八种食材填入鸭腹，寓意"八宝吉祥"，是宴席上的大菜。',
+                steps: [
+                    '开背：鸭子从背部开膛，去骨',
+                    '炒馅：糯米、火腿、虾仁、冬菇等炒香',
+                    '填馅：将八宝料填入鸭腹，缝口',
+                    '蒸制：扣碗封玻璃纸，蒸3-4小时',
+                    '浇汁：原汁加虾仁、青豆勾芡浇淋'
+                ],
+                flavors: { salty: 55, sweet: 45, spicy: 0, savory: 90, aroma: 88 },
+                trivia: '八宝鸭的"八宝"没有固定配方，但糯米和火腿是必不可少的。蒸制时封玻璃纸是为了防止水汽稀释味道。'
+            }
+        ];
+
+        // ========== Canvas河流背景 ==========
+        const canvas = document.getElementById('riverCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let waves = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Wave {
+            constructor(y, amplitude, frequency, speed, opacity) {
+                this.y = y;
+                this.amplitude = amplitude;
+                this.frequency = frequency;
+                this.speed = speed;
+                this.offset = 0;
+                this.opacity = opacity;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(0, this.y);
+                for (let x = 0; x < width; x++) {
+                    const y = this.y + Math.sin(x * this.frequency + this.offset) * this.amplitude;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.closePath();
+                ctx.fillStyle = `rgba(30, 100, 180, ${this.opacity})`;
+                ctx.fill();
+                this.offset += this.speed;
+            }
+        }
+
+        // 创建多层波浪
+        for (let i = 0; i < 5; i++) {
+            waves.push(new Wave(
+                height * (0.3 + i * 0.15),
+                20 + i * 10,
+                0.002 + i * 0.001,
+                0.01 + i * 0.005,
+                0.1 + i * 0.05
+            ));
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            waves.forEach(wave => wave.draw());
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // ========== 滚动显示动画 ==========
+        const stations = document.querySelectorAll('.station');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.2 });
+
+        stations.forEach(station => observer.observe(station));
+
+        // ========== 漂流功能 ==========
+        let isJourneying = false;
+        let currentStation = -1;
+        const floatingDuck = document.getElementById('floatingDuck');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const kmText = document.getElementById('kmText');
+        const startBtn = document.getElementById('startBtn');
+
+        function startJourney() {
+            if (isJourneying) return;
+            isJourneying = true;
+            startBtn.disabled = true;
+            startBtn.textContent = '🦆 漂流中...';
+            progressBar.style.display = 'flex';
+            currentStation = -1;
+            
+            nextStation();
+        }
+
+        function nextStation() {
+            currentStation++;
+            if (currentStation >= stations.length) {
+                // 旅程结束
+                setTimeout(() => {
+                    isJourneying = false;
+                    startBtn.disabled = false;
+                    startBtn.textContent = '🔄 再次漂流';
+                    progressText.textContent = '🎉 漂流完成！';
+                    floatingDuck.style.display = 'none';
+                }, 2000);
+                return;
+            }
+
+            const station = stations[currentStation];
+            const rect = station.getBoundingClientRect();
+            const data = duckData[currentStation];
+            
+            // 移动鸭子
+            floatingDuck.style.display = 'block';
+            floatingDuck.style.left = (rect.left + rect.width / 2 - 30) + 'px';
+            floatingDuck.style.top = (rect.top + window.scrollY - 50) + 'px';
+            
+            // 更新进度
+            const progress = ((currentStation + 1) / stations.length) * 100;
+            progressFill.style.width = progress + '%';
+            progressText.textContent = `🦆 到达${data.city}！`;
+            kmText.textContent = `${station.dataset.km} km`;
+            
+            // 滚动到站点
+            station.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // 高亮站点
+            station.querySelector('.station-dot').style.animation = 'pulse 0.5s ease 3';
+            
+            // 延迟后打开详情
+            setTimeout(() => {
+                openModal(currentStation);
+                // 3秒后自动前往下一站
+                setTimeout(() => {
+                    closeModal();
+                    nextStation();
+                }, 4000);
+            }, 1500);
+        }
+
+        // ========== 弹窗功能 ==========
+        function openModal(index) {
+            const data = duckData[index];
+            document.getElementById('modalTitle').textContent = data.city;
+            document.getElementById('modalDish').textContent = data.dish;
+            document.getElementById('modalHistory').textContent = data.history;
+            
+            const stepsHtml = data.steps.map(step => `<li>${step}</li>`).join('');
+            document.getElementById('modalSteps').innerHTML = stepsHtml;
+            
+            document.getElementById('modalTrivia').textContent = data.trivia;
+            
+            // 生成口味雷达图
+            const flavors = data.flavors;
+            const radarHtml = `
+                <div class="flavor-item">
+                    <div class="flavor-bar"><div class="flavor-fill" style="height: ${flavors.salty}%"></div></div>
+                    <div class="flavor-label">咸</div>
+                </div>
+                <div class="flavor-item">
+                    <div class="flavor-bar"><div class="flavor-fill" style="height: ${flavors.sweet}%"></div></div>
+                    <div class="flavor-label">甜</div>
+                </div>
+                <div class="flavor-item">
+                    <div class="flavor-bar"><div class="flavor-fill" style="height: ${flavors.spicy}%"></div></div>
+                    <div class="flavor-label">辣</div>
+                </div>
+                <div class="flavor-item">
+                    <div class="flavor-bar"><div class="flavor-fill" style="height: ${flavors.savory}%"></div></div>
+                    <div class="flavor-label">鲜</div>
+                </div>
+                <div class="flavor-item">
+                    <div class="flavor-bar"><div class="flavor-fill" style="height: ${flavors.aroma}%"></div></div>
+                    <div class="flavor-label">香</div>
+                </div>
+            `;
+            document.getElementById('flavorRadar').innerHTML = radarHtml;
+            
+            document.getElementById('modalOverlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(e) {
+            if (e && e.target !== document.getElementById('modalOverlay')) return;
+            document.getElementById('modalOverlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // ESC关闭弹窗
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // ========== 鸭子浮动动画 ==========
+        let duckY = 0;
+        setInterval(() => {
+            duckY = Math.sin(Date.now() / 500) * 5;
+            floatingDuck.style.transform = `translateY(${duckY}px)`;
+        }, 50);
+    </script>
+</body>
+</html>
